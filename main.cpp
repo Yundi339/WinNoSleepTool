@@ -12,11 +12,21 @@ namespace {
     HANDLE g_hMutex = nullptr;
     HWND g_hWnd = nullptr;
     
+    // 自定义消息码（用于安全退出）
+    const UINT WM_APP_SHUTDOWN = WM_APP + 1;
+
     // 窗口过程（用于接收消息）
     LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-        if (message == WM_CLOSE) {
-            g_isRunning = false;
-            PostQuitMessage(0);
+        if (message == WM_APP_SHUTDOWN) {
+            // 使用自定义消息 + 验证发送者，防止恶意程序发送退出消息
+            // wParam 传递发送者进程ID用于验证
+            DWORD senderPid = static_cast<DWORD>(wParam);
+            std::wstring currentPath = GetCurrentExecutablePath();
+            
+            if (IsSameProgram(senderPid, currentPath)) {
+                g_isRunning = false;
+                PostQuitMessage(0);
+            }
             return 0;
         }
         return DefWindowProcW(hWnd, message, wParam, lParam);
@@ -87,15 +97,18 @@ namespace {
 
     // 查找并停止已运行的实例
     bool StopExistingInstance(const std::wstring& currentPath) {
-        // 先尝试通过窗口消息优雅退出
+        // 先尝试通过自定义消息优雅退出（使用进程ID验证）
         HWND hWnd = FindExistingWindow();
         if (hWnd) {
-            SendMessageW(hWnd, WM_CLOSE, 0, 0);
-            Sleep(1000);  // 等待进程优雅退出
-            // 检查进程是否还在运行
-            hWnd = FindExistingWindow();
-            if (!hWnd) {
-                return true;  // 已成功退出
+            DWORD currentPid = GetCurrentProcessId();
+            SendMessageW(hWnd, WM_APP_SHUTDOWN, currentPid, 0);
+            // 等待进程优雅退出（最多3秒，每500ms检查一次）
+            for (int i = 0; i < 6; ++i) {
+                Sleep(500);
+                hWnd = FindExistingWindow();
+                if (!hWnd) {
+                    return true;  // 已成功退出
+                }
             }
         }
 
@@ -183,20 +196,18 @@ int main() {
     // 设置线程执行状态，防止系统休眠和显示器关闭
     SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
 
-    // 消息循环
+    // 消息循环（使用 GetMessage 阻塞等待，降低 CPU 占用）
     MSG msg;
     while (g_isRunning.load()) {
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-            if (!g_isRunning.load()) {
-                break;
-            }
+        // 阻塞等待消息，直到有消息或程序退出
+        BOOL ret = GetMessageW(&msg, nullptr, 0, 0);
+        if (ret == 0 || ret == -1) {
+            // WM_QUIT (ret == 0) 或错误 (ret == -1)
+            break;
         }
         
-        if (g_isRunning.load()) {
-            SleepEx(100, FALSE);
-        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
     // 恢复系统默认休眠行为
