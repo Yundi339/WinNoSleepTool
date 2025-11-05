@@ -15,6 +15,32 @@ namespace {
     // 自定义消息码（用于安全退出）
     const UINT WM_APP_SHUTDOWN = WM_APP + 1;
 
+    // 获取当前程序的可执行文件路径
+    std::wstring GetCurrentExecutablePath() {
+        wchar_t path[MAX_PATH] = {0};
+        GetModuleFileNameW(nullptr, path, MAX_PATH);
+        return std::wstring(path);
+    }
+
+    // 检查进程是否为同一程序（通过路径匹配，防止误杀其他程序）
+    bool IsSameProgram(DWORD processId, const std::wstring& currentPath) {
+        HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE,
+                                      processId);
+        if (!hProcess) {
+            return false;
+        }
+
+        wchar_t processPath[MAX_PATH] = {0};
+        if (GetModuleFileNameExW(hProcess, nullptr, processPath, MAX_PATH) == 0) {
+            CloseHandle(hProcess);
+            return false;
+        }
+        CloseHandle(hProcess);
+
+        // 不区分大小写比较路径
+        return _wcsicmp(processPath, currentPath.c_str()) == 0;
+    }
+
     // 窗口过程（用于接收消息）
     LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         if (message == WM_APP_SHUTDOWN) {
@@ -44,32 +70,6 @@ namespace {
                                   WS_OVERLAPPED, 0, 0, 0, 0,
                                   HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), nullptr);
         return g_hWnd != nullptr;
-    }
-
-    // 获取当前程序的可执行文件路径
-    std::wstring GetCurrentExecutablePath() {
-        wchar_t path[MAX_PATH] = {0};
-        GetModuleFileNameW(nullptr, path, MAX_PATH);
-        return std::wstring(path);
-    }
-
-    // 检查进程是否为同一程序（通过路径匹配，防止误杀其他程序）
-    bool IsSameProgram(DWORD processId, const std::wstring& currentPath) {
-        HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE,
-                                      processId);
-        if (!hProcess) {
-            return false;
-        }
-
-        wchar_t processPath[MAX_PATH] = {0};
-        if (GetModuleFileNameExW(hProcess, nullptr, processPath, MAX_PATH) == 0) {
-            CloseHandle(hProcess);
-            return false;
-        }
-        CloseHandle(hProcess);
-
-        // 不区分大小写比较路径
-        return _wcsicmp(processPath, currentPath.c_str()) == 0;
     }
 
     // 终止指定的进程
