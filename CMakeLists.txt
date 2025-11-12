@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(WinNoSleepTool VERSION 1.1.0 LANGUAGES CXX)
+project(WinNoSleepTool VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,8 +10,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -ggdb")
 
 if(WIN32)
     add_definitions(-DWIN32 -D_WIN32)
-    # 静态链接 C/C++
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
     # 隐藏控制台窗口
     set(CMAKE_WIN32_EXECUTABLE TRUE)
 endif()
